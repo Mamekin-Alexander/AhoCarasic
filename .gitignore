@@ -1,0 +1,9 @@
+x32/
+x64/
+Debug/
+Release/
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+main.cpp
