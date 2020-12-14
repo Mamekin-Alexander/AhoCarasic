@@ -4,6 +4,7 @@
 #include <map>
 #include <unordered_set>
 #include <queue>
+#include <set>
 class Bor
 {
 public:
@@ -16,17 +17,31 @@ public:
 	void make_step(char symbol)
 	{
 		State* newState = make_transition(current_state, symbol);
-		if (newState == nullptr && current_state == root) {
+		State* newAnyState = nullptr;
+		for (auto& trans : current_state->transitions) {
+			if (trans.first == '?') {
+				newAnyState = make_transition(current_state, '?');
+				break;
+			}
+		}
+
+		if (newState == nullptr && newAnyState==nullptr && current_state == root) {
 			return;
 		}
-		if (newState == nullptr) {
+		if (newState == nullptr && newAnyState==nullptr) {
 			current_state = current_state->sufRefer;
 			//check_for_terms_and_print();
 			make_step(symbol);
 		}
 		else {
-			current_state = newState;
-			check_for_terms_and_print();
+			if (newState != nullptr) {
+				current_state = newState;
+				check_for_terms_and_print();
+			}
+			else {
+				current_state = newAnyState;
+				check_for_terms_and_print();
+			}
 		}
 		
 	}
@@ -38,30 +53,75 @@ public:
 	void configurate (std::vector<std::string> &vocab)
 	{
 		vocab_ = vocab;
+		for (auto& word : vocab) {
+			for (auto& symb : word) {
+				if (symb != '?') {
+					alphabet.insert(symb);
+				}
+			}
+		}
 		uint32_t IDcounter = 0;
-		State* state = root;
-		for (int32_t i = 0; i < vocab.size(); ++i) {
-			state = root;
-			for (auto j = vocab.at(i).begin(); j != vocab.at(i).end(); ++j) {
-				auto search = state->transitions.find(*j);
-				if (search != state->transitions.end()) {
-					state = search->second;
-				}
-				else {
-					++IDcounter;
+		std::set<State*> states;
 
-					State* newState = new State;
-					newState->ID = IDcounter;
-					newState->parent = state;
-					newState->parentTransSymbol = *j;
-					state->transitions.insert(std::make_pair(*j, newState));
-					state = newState;
+		for (int32_t i = 0; i < vocab.size(); ++i) {
+			states.clear();
+			states.insert(root);
+
+			for (auto j = vocab.at(i).begin(); j != vocab.at(i).end(); ++j) {			
+				std::set<State*> newStates;
+				for (auto& state : states) {
+					auto search = state->transitions.find(*j);
+					if (search != state->transitions.end()) {
+						if (j == vocab.at(i).end() - 1)
+						{
+							search->second->vocabID = i;
+							search->second->isTerminate = true;
+						}
+						newStates.insert(search->second);
+					}
+					else {
+						++IDcounter;
+						State* newState = new State;
+						newState->ID = IDcounter;
+						newState->parent = state;
+						newState->parentTransSymbol = *j;
+						if (j == vocab.at(i).end() - 1)
+						{
+							newState->vocabID = i;
+							newState->isTerminate = true;
+						}
+						state->transitions.insert(std::make_pair(*j, newState));
+						newStates.insert(newState);
+					}
+					if (*j == '?') {
+						for (auto& symbol : alphabet) {
+							auto search = state->transitions.find(symbol);
+							if (search != state->transitions.end()) {
+								if (j == vocab.at(i).end() - 1)
+								{
+									search->second->vocabID = i;
+									search->second->isTerminate = true;
+								}
+								newStates.insert(search->second);
+							}
+							else {
+								++IDcounter;
+								State* newState = new State;
+								newState->ID = IDcounter;
+								newState->parent = state;
+								newState->parentTransSymbol = symbol;
+								if (j == vocab.at(i).end() - 1)
+								{
+									newState->vocabID = i;
+									newState->isTerminate = true;
+								}
+								state->transitions.insert(std::make_pair(symbol, newState));
+								newStates.insert(newState);
+							}
+						}
+					}
 				}
-				if (j == vocab.at(i).end() - 1)
-				{
-					state->vocabID = i;
-					state->isTerminate = true;
-				}
+				states = std::move(newStates);
 			}
 		}
 		calculate_suf_refers();
@@ -149,6 +209,7 @@ public:
 	State* root;
 private:
 	std::vector<std::string> vocab_;
+	std::set<char> alphabet;
 	void calculate_suf_refers()
 	{
 		std::queue<State*> q;
@@ -158,12 +219,17 @@ private:
 			state = q.front();
 			q.pop();
 			if (state != root) {
-				State* newSufRef = make_transition(state->parent->sufRefer, state->parentTransSymbol);
-				if (newSufRef == nullptr) {
+				if (state->parentTransSymbol == '?') {
 					state->sufRefer = root;
 				}
 				else {
-					state->sufRefer = newSufRef;
+					State* newSufRef = make_transition(state->parent->sufRefer, state->parentTransSymbol);
+					if (newSufRef == nullptr) {
+						state->sufRefer = root;
+					}
+					else {
+						state->sufRefer = newSufRef;
+					}
 				}
 			}
 			for (auto& i : state->transitions) {
@@ -253,10 +319,14 @@ int main()
 {
 	AhoCarasic b;
 	std::vector<std::string> vocab;
+	//vocab.emplace_back("baab");
+	vocab.emplace_back("b??bc");
 	vocab.emplace_back("baab");
 	vocab.emplace_back("aa");
 	vocab.emplace_back("a");
 	b.configurate(vocab);
-	std::string text = "ddbaab";
+	/*b.print_bor();
+	b.print_suf_refers();*/
+	std::string text = "baabc";
 	b.execute(text);
 }
